@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { GlassStatCard, pageMotion } from './components/GlassComponents'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import aiemsCampus from './assets/aiems-campus.png'
 import {
   ArrowRight, Bell, Bookmark, BookOpen, Building2, ChevronLeft,
   ChevronRight, CircleUserRound, Download, FileText, GraduationCap,
@@ -11,7 +12,9 @@ import {
   Settings, Sun, Upload, Users, X,
 } from 'lucide-react'
 
-const api = axios.create({ baseURL: 'http://127.0.0.1:8000/api' })
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
+})
 
 type Session = {
   access: string
@@ -61,8 +64,7 @@ function PublicHeader() {
       </nav>
       <div className="public-actions">
         <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Toggle theme">{dark ? <Sun size={17}/> : <Moon size={17}/>}</button>
-        <a className="button secondary compact" href="/login">Log in</a>
-        <a className="button primary compact" href="/register">Create account</a>
+        <a className="button primary compact" href="/login">Faculty login</a>
       </div>
       <button className="mobile-nav-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation">{menuOpen ? <X/> : <Menu/>}</button>
     </header>
@@ -84,7 +86,10 @@ function Home() {
     <motion.div className="public-site" {...pageMotion}>
       <PublicHeader/>
       <main>
-        <section className="hero-section">
+        <section
+          className="hero-section campus-hero"
+          style={{ '--campus-image': `url(${aiemsCampus})` } as CSSProperties}
+        >
           <div className="hero-content">
             <div className="eyebrow"><span></span> AIEMS Academic Hub</div>
             <h1>Your Academic World, All in One Place.</h1>
@@ -95,8 +100,8 @@ function Home() {
               <button type="submit">Search <ArrowRight size={16}/></button>
             </form>
             <div className="hero-links">
-              <a className="button primary" href="/register">Explore resources <ChevronRight size={17}/></a>
-              <a className="text-link" href="/login">I already have an account <ArrowRight size={16}/></a>
+              <a className="button primary" href="/materials">Explore resources <ChevronRight size={17}/></a>
+              <a className="text-link" href="/login">HOD / Teacher login <ArrowRight size={16}/></a>
             </div>
           </div>
           <div className="hero-study-card" aria-label="Resource overview">
@@ -142,7 +147,7 @@ function Home() {
           <div className="about-metrics"><Metric value="3" label="Access roles"/><Metric value="8" label="Semesters"/><Metric value="5" label="Learning modules"/></div>
         </section>
       </main>
-      <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Log in</a><a href="/register">Register</a></div></footer>
+      <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Faculty login</a></div></footer>
     </motion.div>
   )
 }
@@ -182,12 +187,12 @@ function AuthPage({register=false}:{register?:boolean}) {
     <div className="auth-layout">
       <div className="auth-aside">
         <a href="/"><Logo/></a>
-        <div><span className="overline">AIEMS Learning Hub</span><h1>{register ? 'Start your academic journey.' : 'Good to see you again.'}</h1><p>{register ? 'Create your student workspace and access approved college resources.' : 'Continue to your subjects, uploads and learning resources.'}</p></div>
+        <div><span className="overline">AIEMS Learning Hub</span><h1>{register ? 'Start your academic journey.' : 'Faculty workspace access.'}</h1><p>{register ? 'Create your student workspace and access approved college resources.' : 'Manage academic resources and administrative responsibilities.'}</p></div>
         <div className="auth-aside-footer"><span>Secure campus access</span><span>AIEMS · 2026</span></div>
       </div>
       <div className="auth-panel">
         <form className="auth-form" onSubmit={submit}>
-          <div className="auth-heading"><span>{register ? 'Create account' : 'Welcome back'}</span><h2>{register ? 'Student registration' : 'Sign in to AIEMS Hub'}</h2></div>
+          <div className="auth-heading"><span>{register ? 'Create account' : 'Faculty access'}</span><h2>{register ? 'Student registration' : 'HOD / Teacher sign in'}</h2></div>
           {register && <div className="form-grid">
             <Field label="First name"><input required value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})}/></Field>
             <Field label="Last name"><input value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})}/></Field>
@@ -202,7 +207,7 @@ function AuthPage({register=false}:{register?:boolean}) {
           {register && <Field label="Confirm password"><input type="password" required value={form.password_confirm} onChange={e=>setForm({...form,password_confirm:e.target.value})}/></Field>}
           {error && <div className="error-message">{error}</div>}
           <button className="button primary full" disabled={loading}>{loading ? 'Please wait…' : register ? 'Create account' : 'Sign in'} {!loading && <ArrowRight size={17}/>}</button>
-          <p className="auth-switch">{register ? 'Already have an account?' : 'New to AIEMS?'} <a href={register ? '/login' : '/register'}>{register ? 'Sign in' : 'Create account'}</a></p>
+          {register && <p className="auth-switch">Already have an account? <a href="/login">Sign in</a></p>}
         </form>
       </div>
     </div>

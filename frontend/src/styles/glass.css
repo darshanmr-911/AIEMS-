@@ -106,6 +106,18 @@ body::after {
   overflow: hidden;
 }
 
+.campus-hero {
+  background:
+    linear-gradient(90deg, rgba(237, 244, 251, 0.96) 0%, rgba(237, 244, 251, 0.82) 48%, rgba(237, 244, 251, 0.34) 100%),
+    var(--campus-image) center / cover no-repeat;
+}
+
+:root[data-theme="dark"] .campus-hero {
+  background:
+    linear-gradient(90deg, rgba(11, 20, 37, 0.96) 0%, rgba(11, 20, 37, 0.82) 48%, rgba(11, 20, 37, 0.44) 100%),
+    var(--campus-image) center / cover no-repeat;
+}
+
 .hero-section::before,
 .hero-section::after {
   content: "";

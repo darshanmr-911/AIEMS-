@@ -4,6 +4,7 @@ from django.db import models
 class Department(models.Model):
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=20, unique=True)
+    email_prefix = models.CharField(max_length=16, blank=True, default='')
     description = models.TextField(blank=True)
 
     def __str__(self):

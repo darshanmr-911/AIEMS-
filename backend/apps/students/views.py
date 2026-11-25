@@ -52,7 +52,10 @@ class StudentMaterialListView(generics.ListAPIView):
     ordering_fields = ['uploaded_at', 'download_count']
 
     def get_queryset(self):
-        return StudyMaterial.objects.filter(approval_status=StudyMaterial.Status.APPROVED)
+        return StudyMaterial.objects.filter(
+            approval_status=StudyMaterial.Status.APPROVED,
+            department=self.request.user.student_profile.department,
+        )
 
 
 class StudentMaterialDetailView(generics.RetrieveAPIView):
@@ -60,7 +63,10 @@ class StudentMaterialDetailView(generics.RetrieveAPIView):
     serializer_class = StudyMaterialSerializer
 
     def get_queryset(self):
-        return StudyMaterial.objects.filter(approval_status=StudyMaterial.Status.APPROVED)
+        return StudyMaterial.objects.filter(
+            approval_status=StudyMaterial.Status.APPROVED,
+            department=self.request.user.student_profile.department,
+        )
 
 
 class StudentMaterialDownloadView(generics.GenericAPIView):
@@ -71,6 +77,7 @@ class StudentMaterialDownloadView(generics.GenericAPIView):
             StudyMaterial,
             pk=pk,
             approval_status=StudyMaterial.Status.APPROVED,
+            department=request.user.student_profile.department,
         )
         DownloadHistory.objects.create(student=request.user.student_profile, material=material)
         StudyMaterial.objects.filter(pk=pk).update(download_count=F('download_count') + 1)

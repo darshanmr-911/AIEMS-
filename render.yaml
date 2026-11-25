@@ -17,6 +17,22 @@ services:
         value: ".onrender.com"
       - key: CORS_ALLOWED_ORIGINS
         sync: false
+      - key: INITIAL_HOD_PASSWORD
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: DEFAULT_FROM_EMAIL
+        value: AIEMS Hub <no-reply@aiems.edu.in>
+      - key: FRONTEND_BASE_URL
+        sync: false
 
   - type: web
     name: aiems-hub

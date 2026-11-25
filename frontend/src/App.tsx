@@ -2,25 +2,27 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { GlassStatCard, pageMotion } from './components/GlassComponents'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import aiemsCampus from './assets/aiems-campus.png'
 import {
   ArrowRight, Bell, Bookmark, BookOpen, Building2, ChevronLeft,
-  ChevronRight, CircleUserRound, Download, FileText, GraduationCap,
-  LayoutDashboard, Library, LogOut, Menu, Moon, MoreHorizontal, Search,
-  Settings, Sun, Upload, Users, X,
+  ChevronRight, CircleUserRound, ClipboardList, Download, FileText, GraduationCap,
+  KeyRound, LayoutDashboard, Library, LogOut, Menu, Moon, Search,
+  Settings, Sun, Users, X,
 } from 'lucide-react'
+import { api, clearSession, getSession, saveSession, type AppSession } from './lib/api'
+import {
+  HodAssignmentsContent,
+  HodDashboardContent,
+  HodMaterialsContent,
+  HodReportsContent,
+  HodSettingsContent,
+  HodTeachersContent,
+  HodSubjectsContent,
+} from './components/HodAdminContent'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
-})
-
-type Session = {
-  access: string
-  refresh: string
-  user: { id: number; name: string; email: string; role: 'HOD' | 'TEACHER' | 'STUDENT' }
-}
+type Session = AppSession
 type Material = {
   id: number
   title: string
@@ -34,10 +36,8 @@ type Material = {
   download_count: number
   file?: string
   module?: number
-}
-
-function getSession(): Session | null {
-  try { return JSON.parse(localStorage.getItem('aiems_session') || 'null') } catch { return null }
+  department_name?: string
+  semester_number?: number
 }
 
 function Logo({ compact = false }: { compact?: boolean }) {
@@ -64,7 +64,7 @@ function PublicHeader() {
       </nav>
       <div className="public-actions">
         <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Toggle theme">{dark ? <Sun size={17}/> : <Moon size={17}/>}</button>
-        <a className="button primary compact" href="/login">Faculty login</a>
+        <a className="button primary compact" href="/login">Department HOD login</a>
       </div>
       <button className="mobile-nav-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation">{menuOpen ? <X/> : <Menu/>}</button>
     </header>
@@ -101,7 +101,7 @@ function Home() {
             </form>
             <div className="hero-links">
               <a className="button primary" href="/materials">Explore resources <ChevronRight size={17}/></a>
-              <a className="text-link" href="/login">HOD / Teacher login <ArrowRight size={16}/></a>
+              <a className="text-link" href="/login">Department HOD login <ArrowRight size={16}/></a>
             </div>
           </div>
           <div className="hero-study-card" aria-label="Resource overview">
@@ -125,7 +125,7 @@ function Home() {
           <SectionHeading overline="Departments" title="Choose your department" action="View all departments"/>
           <div className="department-grid">
             {departments.map(([code,name]) => (
-              <a className="department-card" href="/login" key={code}>
+              <a className="department-card" href={`/materials?department__code=${encodeURIComponent(code)}`} key={code}>
                 <div className="department-code">{code}</div>
                 <div><h3>{name}</h3><p>View resources <ArrowRight size={14}/></p></div>
               </a>
@@ -147,7 +147,7 @@ function Home() {
           <div className="about-metrics"><Metric value="3" label="Access roles"/><Metric value="8" label="Semesters"/><Metric value="5" label="Learning modules"/></div>
         </section>
       </main>
-      <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Faculty login</a></div></footer>
+      <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Department HOD login</a><a href="/student/login">Student sign in</a></div></footer>
     </motion.div>
   )
 }
@@ -162,56 +162,244 @@ function Metric({value,label}:{value:string,label:string}) {
   return <div className="metric"><strong>{value}</strong><span>{label}</span></div>
 }
 
-function AuthPage({register=false}:{register?:boolean}) {
+function apiErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const data: unknown = error.response?.data
+    if (typeof data === 'string') return data
+    if (data && typeof data === 'object') {
+      const detail = Reflect.get(data, 'detail')
+      if (typeof detail === 'string') return detail
+      const firstValue = Object.values(data)[0]
+      if (typeof firstValue === 'string') return firstValue
+      if (Array.isArray(firstValue) && typeof firstValue[0] === 'string') return firstValue[0]
+    }
+  }
+  return error instanceof Error ? error.message : 'Unable to continue. Please try again.'
+}
+
+function HodLoginPage() {
   const navigate = useNavigate()
-  const [loading,setLoading] = useState(false)
-  const [error,setError] = useState('')
-  const [form,setForm] = useState<any>({
-    username:'',password:'',password_confirm:'',first_name:'',last_name:'',
-    email:'',usn:'',department:'',semester:'',academic_year:'',
-  })
-  const submit = async (event:FormEvent) => {
-    event.preventDefault(); setLoading(true); setError('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
     try {
-      if (register) await api.post('/auth/register/student/',form)
-      const res = await api.post('/auth/login/',{username:form.username,password:form.password})
-      localStorage.setItem('aiems_session',JSON.stringify(res.data))
-      api.defaults.headers.common.Authorization = `Bearer ${res.data.access}`
-      navigate(res.data.user.role === 'HOD' ? '/hod' : res.data.user.role === 'TEACHER' ? '/teacher' : '/student')
-    } catch (err:any) {
-      const data=err?.response?.data
-      setError(typeof data === 'string' ? data : data?.detail || data?.password_confirm?.[0] || 'Unable to continue.')
-    } finally { setLoading(false) }
+      const response = await api.post<AppSession>('/auth/login/', { email, password })
+      saveSession(response.data)
+      navigate(response.data.must_change_password ? '/change-password' : '/hod')
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
   }
   return (
     <div className="auth-layout">
       <div className="auth-aside">
         <a href="/"><Logo/></a>
-        <div><span className="overline">AIEMS Learning Hub</span><h1>{register ? 'Start your academic journey.' : 'Faculty workspace access.'}</h1><p>{register ? 'Create your student workspace and access approved college resources.' : 'Manage academic resources and administrative responsibilities.'}</p></div>
+        <div><span className="overline">AIEMS Learning Hub</span><h1>Your department, securely managed.</h1><p>Sign in with your official department HOD email to manage your academic workspace.</p></div>
         <div className="auth-aside-footer"><span>Secure campus access</span><span>AIEMS · 2026</span></div>
       </div>
       <div className="auth-panel">
         <form className="auth-form" onSubmit={submit}>
-          <div className="auth-heading"><span>{register ? 'Create account' : 'Faculty access'}</span><h2>{register ? 'Student registration' : 'HOD / Teacher sign in'}</h2></div>
-          {register && <div className="form-grid">
-            <Field label="First name"><input required value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})}/></Field>
-            <Field label="Last name"><input value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})}/></Field>
-            <Field label="Email"><input type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
-            <Field label="USN"><input required value={form.usn} onChange={e=>setForm({...form,usn:e.target.value})}/></Field>
-            <Field label="Department ID"><input required value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></Field>
-            <Field label="Semester ID"><input required value={form.semester} onChange={e=>setForm({...form,semester:e.target.value})}/></Field>
-            <Field label="Academic year" span><input required placeholder="2025-2026" value={form.academic_year} onChange={e=>setForm({...form,academic_year:e.target.value})}/></Field>
-          </div>}
-          <Field label="Username"><input required value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/></Field>
-          <Field label="Password"><input type="password" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></Field>
-          {register && <Field label="Confirm password"><input type="password" required value={form.password_confirm} onChange={e=>setForm({...form,password_confirm:e.target.value})}/></Field>}
+          <div className="auth-heading"><span>Department HOD access</span><h2>Sign in to AIEMS Hub</h2></div>
+          <Field label="Official department email"><input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="hodcse@aiems.edu.in"/></Field>
+          <Field label="Password"><input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)}/></Field>
           {error && <div className="error-message">{error}</div>}
-          <button className="button primary full" disabled={loading}>{loading ? 'Please wait…' : register ? 'Create account' : 'Sign in'} {!loading && <ArrowRight size={17}/>}</button>
-          {register && <p className="auth-switch">Already have an account? <a href="/login">Sign in</a></p>}
+          <button className="button primary full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'} {!loading && <ArrowRight size={17}/>}</button>
+          <a className="auth-switch" href="/password-reset">Forgot password?</a>
+          <p className="auth-switch">Looking for study materials? <a href="/materials">Browse the public library</a></p>
         </form>
       </div>
     </div>
   )
+}
+
+function StudentLoginPage() {
+  const navigate = useNavigate()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.post<AppSession>('/auth/student/login/', { username, password })
+      saveSession(response.data)
+      navigate(response.data.must_change_password ? '/change-password' : '/student')
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <div className="auth-layout">
+    <div className="auth-aside"><a href="/"><Logo/></a><div><span className="overline">AIEMS Learning Hub</span><h1>Keep learning with your campus.</h1><p>Student sign-in for existing academic accounts.</p></div><div className="auth-aside-footer"><span>Secure campus access</span><span>AIEMS · 2026</span></div></div>
+    <div className="auth-panel"><form className="auth-form" onSubmit={submit}>
+      <div className="auth-heading"><span>Student access</span><h2>Sign in</h2></div>
+      <Field label="Username"><input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)}/></Field>
+      <Field label="Password"><input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)}/></Field>
+      {error && <div className="error-message">{error}</div>}
+      <button className="button primary full" disabled={loading}>{loading ? 'Please wait…' : 'Sign in'} {!loading && <ArrowRight size={17}/>}</button>
+      <p className="auth-switch">Need an account? <a href="/register">Register as a student</a></p>
+    </form></div>
+  </div>
+}
+
+function StudentRegistrationPage() {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({
+    username: '', password: '', password_confirm: '', first_name: '', last_name: '',
+    email: '', usn: '', department: '', semester: '', academic_year: '',
+  })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      await api.post('/auth/register/student/', {
+        ...form,
+        department: Number(form.department),
+        semester: Number(form.semester),
+      })
+      navigate('/student/login')
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+  return <div className="auth-layout">
+    <div className="auth-aside"><a href="/"><Logo/></a><div><span className="overline">AIEMS Learning Hub</span><h1>Start your academic journey.</h1><p>Create a student workspace to keep track of your department resources.</p></div><div className="auth-aside-footer"><span>Student account</span><span>AIEMS · 2026</span></div></div>
+    <div className="auth-panel"><form className="auth-form" onSubmit={submit}>
+      <div className="auth-heading"><span>Student registration</span><h2>Create account</h2></div>
+      <div className="form-grid">
+        <Field label="First name"><input required value={form.first_name} onChange={(event) => setForm({ ...form, first_name: event.target.value })}/></Field>
+        <Field label="Last name"><input required value={form.last_name} onChange={(event) => setForm({ ...form, last_name: event.target.value })}/></Field>
+        <Field label="Email"><input type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })}/></Field>
+        <Field label="USN"><input required value={form.usn} onChange={(event) => setForm({ ...form, usn: event.target.value })}/></Field>
+        <Field label="Department ID"><input type="number" min={1} required value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}/></Field>
+        <Field label="Semester ID"><input type="number" min={1} required value={form.semester} onChange={(event) => setForm({ ...form, semester: event.target.value })}/></Field>
+        <Field label="Academic year"><input required placeholder="2025-2026" value={form.academic_year} onChange={(event) => setForm({ ...form, academic_year: event.target.value })}/></Field>
+        <Field label="Username"><input required value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })}/></Field>
+        <Field label="Password"><input type="password" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })}/></Field>
+        <Field label="Confirm password"><input type="password" required value={form.password_confirm} onChange={(event) => setForm({ ...form, password_confirm: event.target.value })}/></Field>
+      </div>
+      {error && <div className="error-message">{error}</div>}
+      <button className="button primary full" disabled={loading}>{loading ? 'Creating account…' : 'Create student account'} {!loading && <ArrowRight size={17}/>}</button>
+      <p className="auth-switch">Already registered? <a href="/student/login">Sign in</a></p>
+    </form></div>
+  </div>
+}
+
+function ChangePasswordPage() {
+  const navigate = useNavigate()
+  const session = getSession()
+  const [form, setForm] = useState({ current_password: '', new_password: '', password_confirm: '' })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  if (!session) return <Navigate to="/login" replace/>
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.post<{ access: string; refresh: string; must_change_password: boolean }>('/auth/password/change/', form)
+      saveSession({ ...session, ...response.data })
+      navigate(session.user.role === 'HOD' ? '/hod' : '/student')
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+  return <div className="auth-layout">
+    <div className="auth-aside"><a href="/"><Logo/></a><div><span className="overline">Account security</span><h1>One quick security step.</h1><p>Choose a new password before entering your department workspace.</p></div><div className="auth-aside-footer"><span>Secure campus access</span><span>AIEMS · 2026</span></div></div>
+    <div className="auth-panel"><form className="auth-form" onSubmit={submit}>
+      <div className="auth-heading"><span>Required password update</span><h2>Change your password</h2></div>
+      <Field label="Current password"><input type="password" autoComplete="current-password" required value={form.current_password} onChange={(event) => setForm({ ...form, current_password: event.target.value })}/></Field>
+      <Field label="New password"><input type="password" autoComplete="new-password" minLength={8} required value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })}/></Field>
+      <Field label="Confirm new password"><input type="password" autoComplete="new-password" minLength={8} required value={form.password_confirm} onChange={(event) => setForm({ ...form, password_confirm: event.target.value })}/></Field>
+      {error && <div className="error-message">{error}</div>}
+      <button className="button primary full" disabled={loading}>{loading ? 'Updating…' : 'Update password'} {!loading && <KeyRound size={16}/>}</button>
+    </form></div>
+  </div>
+}
+
+function PasswordResetRequestPage() {
+  const [email, setEmail] = useState('')
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await api.post<{ detail: string }>('/auth/password/reset/', { email })
+      setNotice(response.data.detail)
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+  return <div className="auth-layout"><div className="auth-aside"><a href="/"><Logo/></a><div><span className="overline">Account recovery</span><h1>We’ll help you get back in.</h1><p>Reset links are sent only to the email address registered to the account.</p></div><div className="auth-aside-footer"><span>Secure campus access</span><span>AIEMS · 2026</span></div></div>
+    <div className="auth-panel"><form className="auth-form" onSubmit={submit}>
+      <div className="auth-heading"><span>Password reset</span><h2>Forgot your password?</h2></div>
+      <Field label="Account email"><input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)}/></Field>
+      {notice && <div className="success-message" role="status">{notice}</div>}{error && <div className="error-message">{error}</div>}
+      <button className="button primary full" disabled={loading}>{loading ? 'Sending…' : 'Send reset link'} {!loading && <ArrowRight size={17}/>}</button>
+      <p className="auth-switch"><a href="/login">Return to HOD sign in</a></p>
+    </form></div>
+  </div>
+}
+
+function PasswordResetConfirmPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [form, setForm] = useState({ new_password: '', password_confirm: '' })
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.post<{ detail: string }>('/auth/password/reset/confirm/', {
+        uid: searchParams.get('uid') || '',
+        token: searchParams.get('token') || '',
+        ...form,
+      })
+      setNotice(response.data.detail)
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+  return <div className="auth-layout"><div className="auth-aside"><a href="/"><Logo/></a><div><span className="overline">Account recovery</span><h1>Choose a new password.</h1><p>This one-time reset link expires automatically after use.</p></div><div className="auth-aside-footer"><span>Secure campus access</span><span>AIEMS · 2026</span></div></div>
+    <div className="auth-panel"><form className="auth-form" onSubmit={submit}>
+      <div className="auth-heading"><span>Password reset</span><h2>Set a new password</h2></div>
+      <Field label="New password"><input type="password" autoComplete="new-password" minLength={8} required value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })}/></Field>
+      <Field label="Confirm new password"><input type="password" autoComplete="new-password" minLength={8} required value={form.password_confirm} onChange={(event) => setForm({ ...form, password_confirm: event.target.value })}/></Field>
+      {notice && <div className="success-message" role="status">{notice} <button type="button" className="text-button" onClick={() => navigate('/login')}>Sign in</button></div>}
+      {error && <div className="error-message">{error}</div>}
+      {!notice && <button className="button primary full" disabled={loading}>{loading ? 'Updating…' : 'Reset password'} {!loading && <KeyRound size={16}/>}</button>}
+    </form></div>
+  </div>
 }
 function Field({label,children,span=false}:{label:string,children:ReactNode,span?:boolean}) {
   return <label className={span ? 'field span' : 'field'}><span>{label}</span>{children}</label>
@@ -221,11 +409,18 @@ function Sidebar({role,collapsed,onCollapse}:{role:Session['user']['role'],colla
   const navigate=useNavigate()
   const session=getSession()
   const items = role==='HOD'
-    ? [['/hod','Overview',LayoutDashboard],['/hod/teachers','Teachers',Users],['/hod/materials','Approvals',Library],['/hod/academics','Academics',Building2],['/hod/reports','Reports',Settings]]
-    : role==='TEACHER'
-    ? [['/teacher','Overview',LayoutDashboard],['/teacher/upload','Upload',Upload],['/teacher/materials','My uploads',Library],['/teacher/subjects','Assigned subjects',BookOpen]]
+    ? [['/hod','Overview',LayoutDashboard],['/hod/teachers','Teachers',Users],['/hod/subjects','Subjects',BookOpen],['/hod/assignments','Assignments',ClipboardList],['/hod/materials','Study materials',Library],['/hod/approvals','Approvals',ClipboardList],['/hod/reports','Reports',FileText],['/hod/settings','Settings',Settings]]
     : [['/student','Overview',LayoutDashboard],['/materials','Library',Library],['/student/bookmarks','Bookmarks',Bookmark],['/student/profile','Profile',CircleUserRound]]
-  const logout=()=>{localStorage.removeItem('aiems_session');navigate('/')}
+  const logout=async()=>{
+    try {
+      if (session?.refresh) await api.post('/auth/logout/', { refresh: session.refresh })
+    } catch (reason) {
+      window.alert(`Signed out locally, but the server could not revoke the session: ${apiErrorMessage(reason)}`)
+    } finally {
+      clearSession()
+      navigate('/')
+    }
+  }
   return (
     <aside className={collapsed?'sidebar collapsed':'sidebar'}>
       <div className="sidebar-brand"><a href="/"><Logo compact={collapsed}/></a><button onClick={onCollapse} aria-label="Collapse sidebar"><ChevronLeft size={16}/></button></div>
@@ -308,9 +503,7 @@ function PanelHeading({title,action,href}:{title:string,action?:string,href?:str
 }
 
 async function downloadMaterial(material: Material) {
-  const session = getSession()
-  if (!session) return
-  const response = await api.get(`/student/materials/${material.id}/download/`, {
+  const response = await api.get(`/public/materials/${material.id}/download/`, {
     responseType: 'blob',
   })
   const url = window.URL.createObjectURL(response.data)
@@ -332,146 +525,77 @@ function MaterialList({materials}:{materials:Material[]}) {
   return <div className="material-list">{materials.map(material=><article className="material-row" key={material.id}><div className="file-icon blue"><FileText size={18}/></div><div className="material-info"><strong>{material.title}</strong><span>{material.subject_name||'Academic resource'} · {material.category.replaceAll('_',' ').toLowerCase()}</span></div><div className="material-meta"><span>{material.approval_status}</span><small>{material.download_count||0} downloads</small></div><button className="icon-button" title="Bookmark" onClick={()=>bookmarkMaterial(material)}><Bookmark size={16}/></button><button className="icon-button" title="Download" onClick={()=>downloadMaterial(material)}><Download size={16}/></button></article>)}</div>
 }
 
-function TeacherDashboard() {
-  const [materials,setMaterials]=useState<Material[]>([])
-  const [loading,setLoading]=useState(true)
-  const [showUpload,setShowUpload]=useState(false)
-  useEffect(()=>{
-    const session=getSession(); if(!session)return
-    api.defaults.headers.common.Authorization=`Bearer ${session.access}`
-    api.get('/teacher/materials/').then(r=>setMaterials(Array.isArray(r.data)?r.data:r.data.results||[])).finally(()=>setLoading(false))
-  },[])
-  const approved=materials.filter(m=>m.approval_status==='APPROVED').length
-  const pending=materials.filter(m=>m.approval_status==='PENDING').length
-  const rejected=materials.filter(m=>m.approval_status==='REJECTED').length
-  return <Dashboard role="TEACHER" title="Overview" subtitle="Manage your academic contributions">
-    <div className="stat-grid">
-      <StatCard label="Total uploads" value={materials.length} detail="All submitted resources" icon={<Upload/>} tone="blue"/>
-      <StatCard label="Approved" value={approved} detail="Visible to students" icon={<FileText/>} tone="green"/>
-      <StatCard label="Pending review" value={pending} detail="Awaiting HOD approval" icon={<Bell/>} tone="amber"/>
-      <StatCard label="Needs revision" value={rejected} detail="Rejected submissions" icon={<X/>} tone="red"/>
-    </div>
-    <div className="dashboard-grid teacher-grid">
-      <section className="panel"><PanelHeading title="Recent uploads" action="View all"/>{loading?<EmptyState title="Loading uploads" text="Fetching your latest submissions."/>:<MaterialTable materials={materials.slice(0,8)}/>}</section>
-      <section className="panel"><PanelHeading title="Quick upload"/><button className="upload-dropzone" onClick={()=>setShowUpload(true)}><div><Upload size={22}/></div><strong>Add study material</strong><span>PDF, DOCX or PPTX · 25 MB max</span></button><div className="approval-summary"><div><span>Approval status</span><strong>{pending} pending</strong></div><div className="status-bar"><span style={{width:`${materials.length?approved/materials.length*100:0}%`}}></span></div></div></section>
-    </div>
-    {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} onUploaded={()=>window.location.reload()}/>}
-  </Dashboard>
-}
-
-function UploadModal({onClose,onUploaded}:{onClose:()=>void,onUploaded:()=>void}) {
-  const [form,setForm]=useState<any>({title:'',description:'',department:'',semester:'',subject:'',module:'',category:'NOTES',academic_year:''})
-  const [file,setFile]=useState<File|null>(null)
-  const [progress,setProgress]=useState(0)
-  const [error,setError]=useState('')
-  const submit=async(e:FormEvent)=>{
-    e.preventDefault(); setError('')
-    if(!file){setError('Choose a document to upload.');return}
-    const data=new FormData()
-    Object.entries(form).forEach(([key,value])=>{if(value!==''&&value!=null)data.append(key,String(value))})
-    data.append('file',file)
-    try{
-      await api.post('/teacher/materials/',data,{headers:{'Content-Type':'multipart/form-data'},onUploadProgress:p=>setProgress(Math.round((p.loaded/(p.total||1))*100))})
-      onUploaded()
-    }catch(err:any){setError(err?.response?.data?.detail||'Upload failed. Check subject assignment and required fields.')}
-  }
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-heading"><div><span>Study material</span><h2>Upload resource</h2></div><button className="icon-button" onClick={onClose}><X size={17}/></button></div><form onSubmit={submit}><div className="form-grid"><Field label="Material title" span><input required value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></Field><Field label="Department ID"><input required value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></Field><Field label="Semester ID"><input required value={form.semester} onChange={e=>setForm({...form,semester:e.target.value})}/></Field><Field label="Subject ID"><input required value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})}/></Field><Field label="Module"><input value={form.module} onChange={e=>setForm({...form,module:e.target.value})}/></Field><Field label="Category"><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option value="NOTES">Subject notes</option><option value="PREVIOUS_PAPER">Previous paper</option><option value="MODEL_PAPER">Model paper</option><option value="ASSIGNMENT">Assignment</option><option value="LAB_MANUAL">Lab manual</option><option value="SYLLABUS">Syllabus</option><option value="REFERENCE">Reference material</option></select></Field><Field label="Academic year"><input required placeholder="2025-2026" value={form.academic_year} onChange={e=>setForm({...form,academic_year:e.target.value})}/></Field><Field label="Description" span><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field><label className="file-input span"><input type="file" accept=".pdf,.docx,.pptx" onChange={e=>setFile(e.target.files?.[0]||null)}/><Upload size={20}/><span>{file?file.name:'Choose PDF, DOCX or PPTX'}</span></label></div>{progress>0&&<div className="upload-progress"><span style={{width:`${progress}%`}}></span></div>}{error&&<div className="error-message">{error}</div>}<div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={progress>0&&progress<100}>Upload material</button></div></form></div></div>
-}
-
-function MaterialTable({materials}:{materials:Material[]}) {
-  if(!materials.length)return <EmptyState title="No uploads yet" text="Use the upload action to submit your first resource."/>
-  return <div className="table-wrap"><table><thead><tr><th>Resource</th><th>Type</th><th>Status</th><th>Downloads</th><th></th></tr></thead><tbody>{materials.map(m=><tr key={m.id}><td><div className="table-resource"><div className="file-icon blue"><FileText size={17}/></div><div><strong>{m.title}</strong><span>{m.subject_name||m.subject_code||'Academic resource'}</span></div></div></td><td>{m.category.replaceAll('_',' ').toLowerCase()}</td><td><Status status={m.approval_status}/></td><td>{m.download_count||0}</td><td><button className="icon-button"><MoreHorizontal size={16}/></button></td></tr>)}</tbody></table></div>
-}
-function Status({status}:{status:string}) {
-  return <span className={`status ${status.toLowerCase()}`}>{status==='PENDING'?'Pending review':status==='APPROVED'?'Approved':status==='REJECTED'?'Needs revision':status}</span>
-}
-
-async function reviewMaterial(material: Material, action: 'approve' | 'reject') {
-  let rejectionReason = ''
-  if (action === 'reject') {
-    rejectionReason = window.prompt('Reason for rejecting this material')?.trim() || ''
-    if (!rejectionReason) return
-  }
-  await api.post(`/hod/materials/${material.id}/${action}/`, {
-    rejection_reason: rejectionReason,
-  })
-  window.location.reload()
-}
-
-function HodDashboard() {
-  const [data,setData]=useState<any>(null)
-  const [teachers,setTeachers]=useState<any[]>([])
-  const [materials,setMaterials]=useState<Material[]>([])
-  const [loading,setLoading]=useState(true)
-  useEffect(()=>{
-    const session=getSession();if(!session)return
-    api.defaults.headers.common.Authorization=`Bearer ${session.access}`
-    Promise.all([api.get('/hod/dashboard/'),api.get('/hod/teachers/'),api.get('/hod/materials/')])
-      .then(([d,t,m])=>{setData(d.data);setTeachers(Array.isArray(t.data)?t.data:t.data.results||[]);setMaterials(Array.isArray(m.data)?m.data:m.data.results||[])})
-      .finally(()=>setLoading(false))
-  },[])
-  const pending=materials.filter(m=>m.approval_status==='PENDING')
-  return <Dashboard role="HOD" title="Administration" subtitle="Monitor academics and material approvals">
-    {loading?<div className="stat-grid">{[1,2,3,4].map(n=><div className="stat-card skeleton" key={n}></div>)}</div>:<>
-      <div className="stat-grid four">
-        <StatCard label="Students" value={data?.students||0} detail="Registered learners" icon={<Users/>} tone="blue"/>
-        <StatCard label="Teachers" value={data?.teachers||0} detail="Faculty accounts" icon={<CircleUserRound/>} tone="green"/>
-        <StatCard label="Departments" value={data?.departments||0} detail="Academic departments" icon={<Building2/>} tone="amber"/>
-        <StatCard label="Pending approvals" value={data?.pending_materials||0} detail="Requires review" icon={<Library/>} tone="red"/>
-      </div>
-      <div className="dashboard-grid hod-grid">
-        <section className="panel"><PanelHeading title="Pending material approvals" action={`${pending.length} waiting`}/>{pending.length?<div className="approval-list">{pending.slice(0,5).map(m=><div className="approval-row" key={m.id}><div className="file-icon amber"><FileText size={17}/></div><div><strong>{m.title}</strong><span>{m.subject_name||'Academic resource'} · {m.uploaded_by_name||'Teacher'}</span></div><div className="approval-actions"><button className="glass-button approve" onClick={()=>reviewMaterial(m,'approve')}>Approve</button><button className="glass-button reject" onClick={()=>reviewMaterial(m,'reject')}>Reject</button></div></div>)}</div>:<EmptyState title="All caught up" text="There are no materials waiting for review."/>}</section>
-        <section className="panel"><PanelHeading title="Academic coverage"/><div className="coverage-list"><Coverage label="Subjects" value={data?.subjects||0} max={data?.subjects||1}/><Coverage label="Approved" value={data?.approved_materials||0} max={data?.materials||1}/><Coverage label="Pending" value={data?.pending_materials||0} max={data?.materials||1}/></div></section>
-      </div>
-      <section className="panel"><PanelHeading title="Teacher directory" action="Manage teachers"/><div className="table-wrap"><table><thead><tr><th>Teacher</th><th>Email</th><th>Employee ID</th><th>Department</th><th>Status</th></tr></thead><tbody>{teachers.map((teacher:any)=><tr key={teacher.id}><td><div className="table-resource"><div className="user-avatar small">{(teacher.first_name||teacher.username).slice(0,1).toUpperCase()}</div><strong>{teacher.first_name||teacher.username} {teacher.last_name||''}</strong></div></td><td>{teacher.email||'—'}</td><td>{teacher.teacher_profile?.employee_id||'—'}</td><td>{teacher.teacher_profile?.department_name||'—'}</td><td><span className={teacher.is_active?'status approved':'status rejected'}>{teacher.is_active?'Active':'Inactive'}</span></td></tr>)}</tbody></table></div>{!teachers.length&&<EmptyState title="No teachers yet" text="Teacher accounts created by the HOD will appear here."/>}</section>
-    </>}
-  </Dashboard>
-}
-function Coverage({label,value,max}:{label:string,value:number,max:number}) {
-  return <div className="coverage"><div><span>{label}</span><strong>{value}</strong></div><div className="status-bar"><span style={{width:`${max?Math.min(100,value/max*100):0}%`}}></span></div></div>
-}
-
 function MaterialsLibrary() {
+  const [searchParams]=useSearchParams()
   const [materials,setMaterials]=useState<Material[]>([])
-  const [query,setQuery]=useState('')
+  const [query,setQuery]=useState(searchParams.get('q') || '')
   const [category,setCategory]=useState('')
   const [loading,setLoading]=useState(true)
+  const [error,setError]=useState('')
+  const departmentCode=searchParams.get('department__code') || ''
   useEffect(()=>{
-    const session=getSession()
-    if(session)api.defaults.headers.common.Authorization=`Bearer ${session.access}`
-    api.get('/student/materials/',{params:{search:query||undefined,category:category||undefined}})
-      .then(r=>setMaterials(Array.isArray(r.data)?r.data:r.data.results||[])).finally(()=>setLoading(false))
-  },[query,category])
-  const session=getSession()
-  return session?<Dashboard role={session.user.role} title="Resource library" subtitle="Search and filter approved academic materials">
-    <section className="library-toolbar"><div className="library-search"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search title, subject or subject code"/></div><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option><option value="NOTES">Notes</option><option value="PREVIOUS_PAPER">Previous papers</option><option value="MODEL_PAPER">Model papers</option><option value="ASSIGNMENT">Assignments</option><option value="LAB_MANUAL">Lab manuals</option><option value="SYLLABUS">Syllabus</option></select></section>
-    {loading?<div className="material-card-grid">{[1,2,3,4].map(n=><div className="material-card skeleton" key={n}></div>)}</div>:materials.length?<div className="material-card-grid">{materials.map(m=><article className="material-card" key={m.id}><div className="material-card-top"><div className="file-icon blue"><FileText/></div><button className="icon-button" title="Bookmark" onClick={()=>bookmarkMaterial(m)}><Bookmark size={16}/></button></div><span className="category-label">{m.category.replaceAll('_',' ').toLowerCase()}</span><h3>{m.title}</h3><p>{m.description||'Approved academic resource'}</p><div className="material-card-footer"><span>{m.subject_code||m.subject_name||'AIEMS'}</span><button className="icon-button" title="Download" onClick={()=>downloadMaterial(m)}><Download size={16}/></button></div></article>)}</div>:<EmptyState title="No matching resources" text="Try clearing the search or selecting another category."/>}
-  </Dashboard>:<Navigate to="/login" replace/>
+    api.get('/public/materials/',{params:{search:query||undefined,category:category||undefined,'department__code':departmentCode||undefined}})
+      .then(response=>setMaterials(Array.isArray(response.data)?response.data:response.data.results||[]))
+      .catch(reason=>setError(apiErrorMessage(reason)))
+      .finally(()=>setLoading(false))
+  },[query,category,departmentCode])
+  const search=(value:string)=>{setLoading(true);setError('');setQuery(value)}
+  const selectCategory=(value:string)=>{setLoading(true);setError('');setCategory(value)}
+  const download=async(material:Material)=>{
+    try { await downloadMaterial(material) } catch(reason) { setError(apiErrorMessage(reason)) }
+  }
+  return <div className="public-site">
+    <PublicHeader/>
+    <main className="public-section public-library">
+      <div className="section-heading"><div><span>AIEMS Academic Hub</span><h1>{departmentCode ? `${departmentCode} resources` : 'Study material library'}</h1><p>Browse and download approved learning resources from across AIEMS.</p></div></div>
+      <section className="library-toolbar" aria-label="Filter study materials">
+        <div className="library-search"><Search size={18}/><input aria-label="Search materials" value={query} onChange={event=>search(event.target.value)} placeholder="Search title, subject or subject code"/></div>
+        <select aria-label="Filter by category" value={category} onChange={event=>selectCategory(event.target.value)}><option value="">All categories</option><option value="NOTES">Notes</option><option value="PREVIOUS_PAPER">Previous papers</option><option value="MODEL_PAPER">Model papers</option><option value="ASSIGNMENT">Assignments</option><option value="LAB_MANUAL">Lab manuals</option><option value="SYLLABUS">Syllabus</option></select>
+      </section>
+      {error&&<div className="error-message" role="alert">{error}</div>}
+      {loading?<div className="material-card-grid">{[1,2,3,4].map(n=><div className="material-card skeleton" key={n}></div>)}</div>:materials.length?<div className="material-card-grid">{materials.map(m=><article className="material-card" key={m.id}>
+        <div className="material-card-top"><div className="file-icon blue"><FileText/></div><span className="category-label">{m.category.replaceAll('_',' ').toLowerCase()}</span></div>
+        <h3>{m.title}</h3><p>{m.description||'Approved academic resource'}</p>
+        <div className="public-material-meta"><span>{m.subject_code||m.subject_name||'AIEMS'}</span><span>{m.department_name||departmentCode}{m.semester_number?` · Semester ${m.semester_number}`:''}</span></div>
+        <div className="material-card-footer"><span>{m.download_count||0} downloads</span><button className="button secondary compact" onClick={()=>void download(m)}><Download size={15}/> Download</button></div>
+      </article>)}</div>:<EmptyState title="No matching resources" text="Try clearing the search or selecting another category."/>}
+    </main>
+    <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Department HOD login</a><a href="/student/login">Student sign in</a></div></footer>
+  </div>
 }
 
 function Protected({role,children}:{role:Session['user']['role'],children:ReactNode}) {
   const session=getSession()
-  return session&&session.user.role===role?children:<Navigate to="/login" replace/>
+  if (!session) return <Navigate to={role === 'STUDENT' ? '/student/login' : '/login'} replace/>
+  if (session.must_change_password) return <Navigate to="/change-password" replace/>
+  if (session.user.role !== role) {
+    return <Navigate to={session.user.role === 'HOD' ? '/hod' : session.user.role === 'STUDENT' ? '/student' : '/login'} replace/>
+  }
+  return children
 }
 
 export default function App() {
   return <BrowserRouter><Routes>
     <Route path="/" element={<Home/>}/>
-    <Route path="/login" element={<AuthPage/>}/>
-    <Route path="/register" element={<AuthPage register/>}/>
+    <Route path="/login" element={<HodLoginPage/>}/>
+    <Route path="/student/login" element={<StudentLoginPage/>}/>
+    <Route path="/register" element={<StudentRegistrationPage/>}/>
+    <Route path="/change-password" element={<ChangePasswordPage/>}/>
+    <Route path="/password-reset" element={<PasswordResetRequestPage/>}/>
+    <Route path="/password-reset/confirm" element={<PasswordResetConfirmPage/>}/>
     <Route path="/student" element={<Protected role="STUDENT"><StudentDashboard/></Protected>}/>
-    <Route path="/teacher" element={<Protected role="TEACHER"><TeacherDashboard/></Protected>}/>
-    <Route path="/hod" element={<Protected role="HOD"><HodDashboard/></Protected>}/>
+    <Route path="/hod" element={<Protected role="HOD"><Dashboard role="HOD" title="Department overview" subtitle="Your department at a glance"><HodDashboardContent/></Dashboard></Protected>}/>
     <Route path="/materials" element={<MaterialsLibrary/>}/>
     <Route path="/student/bookmarks" element={<Protected role="STUDENT"><StudentDashboard/></Protected>}/>
     <Route path="/student/profile" element={<Protected role="STUDENT"><StudentDashboard/></Protected>}/>
-    <Route path="/teacher/upload" element={<Protected role="TEACHER"><TeacherDashboard/></Protected>}/>
-    <Route path="/teacher/materials" element={<Protected role="TEACHER"><TeacherDashboard/></Protected>}/>
-    <Route path="/teacher/subjects" element={<Protected role="TEACHER"><TeacherDashboard/></Protected>}/>
-    <Route path="/hod/teachers" element={<Protected role="HOD"><HodDashboard/></Protected>}/>
-    <Route path="/hod/materials" element={<Protected role="HOD"><HodDashboard/></Protected>}/>
-    <Route path="/hod/academics" element={<Protected role="HOD"><HodDashboard/></Protected>}/>
-    <Route path="/hod/reports" element={<Protected role="HOD"><HodDashboard/></Protected>}/>
+    <Route path="/hod/teachers" element={<Protected role="HOD"><Dashboard role="HOD" title="Teacher management" subtitle="Manage accounts and assignments in your department"><HodTeachersContent/></Dashboard></Protected>}/>
+    <Route path="/hod/subjects" element={<Protected role="HOD"><Dashboard role="HOD" title="Subject management" subtitle="Organize department semesters and subjects"><HodSubjectsContent/></Dashboard></Protected>}/>
+    <Route path="/hod/assignments" element={<Protected role="HOD"><Dashboard role="HOD" title="Teacher assignments" subtitle="Assign department subjects to teachers"><HodAssignmentsContent/></Dashboard></Protected>}/>
+    <Route path="/hod/materials" element={<Protected role="HOD"><Dashboard role="HOD" title="Study materials" subtitle="Upload resources and review teacher submissions"><HodMaterialsContent/></Dashboard></Protected>}/>
+    <Route path="/hod/approvals" element={<Protected role="HOD"><Dashboard role="HOD" title="Material approvals" subtitle="Review submissions from your department"><HodMaterialsContent initialStatus="PENDING"/></Dashboard></Protected>}/>
+    <Route path="/hod/reports" element={<Protected role="HOD"><Dashboard role="HOD" title="Department reports" subtitle="Review department-specific activity and totals"><HodReportsContent/></Dashboard></Protected>}/>
+    <Route path="/hod/settings" element={<Protected role="HOD"><Dashboard role="HOD" title="Account settings" subtitle="Manage your department HOD account"><HodSettingsContent/></Dashboard></Protected>}/>
+    <Route path="/hod/academics" element={<Protected role="HOD"><Navigate to="/hod/subjects" replace/></Protected>}/>
     <Route path="*" element={<Navigate to="/" replace/>}/>
   </Routes></BrowserRouter>
 }

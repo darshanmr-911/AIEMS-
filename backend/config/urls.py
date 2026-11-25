@@ -18,17 +18,16 @@ from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
-from rest_framework_simplejwt.views import TokenRefreshView
-from apps.accounts.views import LoginView, StudentRegistrationView
+from apps.accounts.views import LoginView, SecureTokenRefreshView, StudentRegistrationView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/login/', LoginView.as_view()),
     path('api/auth/register/student/', StudentRegistrationView.as_view()),
-    path('api/auth/token/refresh/', TokenRefreshView.as_view()),
+    path('api/auth/token/refresh/', SecureTokenRefreshView.as_view()),
     path('api/auth/', include('apps.accounts.urls')),
     path('api/hod/', include('apps.teachers.urls')),
-    path('api/teacher/', include('apps.materials.urls')),
+    path('api/public/', include('apps.materials.urls')),
     path('api/student/', include('apps.students.urls')),
 ]
 

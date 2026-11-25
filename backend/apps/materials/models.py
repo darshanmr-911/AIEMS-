@@ -36,7 +36,20 @@ class StudyMaterial(models.Model):
 
     title = models.CharField(max_length=250)
     description = models.TextField(blank=True)
-    uploaded_by = models.ForeignKey('accounts.TeacherProfile', on_delete=models.PROTECT, related_name='uploads')
+    uploaded_by = models.ForeignKey(
+        'accounts.TeacherProfile',
+        on_delete=models.PROTECT,
+        related_name='uploads',
+        null=True,
+        blank=True,
+    )
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='created_materials',
+        null=True,
+        blank=True,
+    )
     department = models.ForeignKey('academics.Department', on_delete=models.PROTECT, related_name='materials')
     semester = models.ForeignKey('academics.Semester', on_delete=models.PROTECT, related_name='materials')
     subject = models.ForeignKey('academics.Subject', on_delete=models.PROTECT, related_name='materials')

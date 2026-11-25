@@ -31,9 +31,9 @@ class PublicMaterialFilter(filters.FilterSet):
         fields = ['academic_year']
 
     def filter_study_year(self, queryset, name, value):
-        study_year = int(value)
-        if study_year not in range(1, 5):
+        if value not in range(1, 5):
             return queryset.none()
+        study_year = int(value)
         first_semester = (study_year - 1) * 2 + 1
         return queryset.filter(
             semester__semester_number__gte=first_semester,

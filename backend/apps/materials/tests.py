@@ -372,6 +372,11 @@ class TeacherMaterialWorkflowTests(APITestCase):
         self.assertEqual(material.department_id, self.department.id)
         self.assertEqual(material.uploaded_by_id, self.profile.id)
         self.assertEqual(material.approval_status, StudyMaterial.Status.PENDING)
+        download = self.client.get(f'/api/teacher/materials/{material.id}/download/')
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(b''.join(download.streaming_content), b'%PDF-1.4 teacher content')
+        material.approval_status = StudyMaterial.Status.APPROVED
+        material.save(update_fields=['approval_status'])
 
         edited = self.client.patch(
             f'/api/teacher/materials/{material.id}/',

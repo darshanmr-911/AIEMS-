@@ -199,7 +199,7 @@ class DepartmentHodAccessTests(APITestCase):
         self.assertNotEqual(response.status_code, 200)
         self.authenticate(teacher)
         self.assertEqual(self.client.get('/api/hod/teachers/').status_code, 403)
-        self.assertEqual(self.client.get('/api/teacher/materials/').status_code, 404)
+        self.assertEqual(self.client.get('/api/teacher/materials/').status_code, 403)
 
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_password_reset_email_and_confirmation(self):

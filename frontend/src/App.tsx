@@ -594,8 +594,6 @@ function MaterialsLibrary() {
       subject: subject || undefined,
       material_type: materialType || undefined,
     }
-    setLoading(true)
-    setError('')
     api.get('/public/materials/', { params })
       .then(response => {
         if (active) setMaterials(Array.isArray(response.data) ? response.data : response.data.results || [])
@@ -607,7 +605,6 @@ function MaterialsLibrary() {
 
   useEffect(() => {
     let active = true
-    setOptionsError('')
     api.get<Array<{ id: number; name: string; code: string }>>('/public/materials/options/', {
       params: {
         department_code: departmentCode || undefined,
@@ -616,6 +613,7 @@ function MaterialsLibrary() {
       },
     }).then(response => {
       if (!active) return
+      setOptionsError('')
       setSubjects(response.data)
     }).catch(reason => { if (active) setOptionsError(apiErrorMessage(reason)) })
     return () => { active = false }
@@ -625,19 +623,25 @@ function MaterialsLibrary() {
     setDepartmentCode(value)
     setSubject('')
     setLoading(true)
+    setError('')
   }
   const setYear = (value: string) => {
     setStudyYear(value)
     setSemester('')
     setSubject('')
     setLoading(true)
+    setError('')
   }
   const setSemesterFilter = (value: string) => {
     setSemester(value)
     setSubject('')
     setLoading(true)
+    setError('')
   }
   const clearFilters = () => {
+    setLoading(true)
+    setError('')
+    setOptionsError('')
     setQuery('')
     setDepartmentCode('')
     setStudyYear('')
@@ -657,12 +661,12 @@ function MaterialsLibrary() {
     <main className="public-section public-library">
       <div className="section-heading"><div><span>AIEMS Academic Hub</span><h1>{departmentCode ? `${departmentCode} resources` : 'Study material library'}</h1><p>Browse and download approved learning resources from across AIEMS.</p></div></div>
       <section className="library-toolbar" aria-label="Filter study materials">
-        <div className="library-search"><Search size={18}/><input aria-label="Search materials" value={query} onChange={event => { setQuery(event.target.value); setLoading(true) }} placeholder="Search title, subject or subject code"/></div>
+        <div className="library-search"><Search size={18}/><input aria-label="Search materials" value={query} onChange={event => { setQuery(event.target.value); setLoading(true); setError('') }} placeholder="Search title, subject or subject code"/></div>
         <select aria-label="Filter by department" value={departmentCode} onChange={event => setDepartment(event.target.value)}><option value="">All departments</option><option value="AIML">AIML</option><option value="CSE">CSE</option><option value="ISE">ISE</option><option value="ECE">ECE</option><option value="EEE">EEE</option><option value="MECH">Mechanical</option><option value="CIVIL">Civil</option></select>
         <select aria-label="Filter by study year" value={studyYear} onChange={event => setYear(event.target.value)}><option value="">All years</option>{[1, 2, 3, 4].map(year => <option value={year} key={year}>{year}{year === 1 ? 'st' : year === 2 ? 'nd' : year === 3 ? 'rd' : 'th'} Year</option>)}</select>
         <select aria-label="Filter by semester" value={semester} onChange={event => setSemesterFilter(event.target.value)}><option value="">All semesters</option>{semesterOptions.map(number => <option value={number} key={number}>{number}{number === 1 ? 'st' : number === 2 ? 'nd' : number === 3 ? 'rd' : 'th'} Semester</option>)}</select>
-        <select aria-label="Filter by subject" value={subject} onChange={event => { setSubject(event.target.value); setLoading(true) }}><option value="">All subjects</option>{subjects.map(option => <option value={option.id} key={option.id}>{option.code} · {option.name}</option>)}</select>
-        <select aria-label="Filter by material type" value={materialType} onChange={event => { setMaterialType(event.target.value); setLoading(true) }}><option value="">All material types</option><option value="NOTES">Notes</option><option value="ASSIGNMENT">Assignments</option><option value="QUESTION_PAPER">Question Papers</option><option value="LAB_MANUAL">Lab Manuals</option><option value="OTHER">Other</option></select>
+        <select aria-label="Filter by subject" value={subject} onChange={event => { setSubject(event.target.value); setLoading(true); setError('') }}><option value="">All subjects</option>{subjects.map(option => <option value={option.id} key={option.id}>{option.code} · {option.name}</option>)}</select>
+        <select aria-label="Filter by material type" value={materialType} onChange={event => { setMaterialType(event.target.value); setLoading(true); setError('') }}><option value="">All material types</option><option value="NOTES">Notes</option><option value="ASSIGNMENT">Assignments</option><option value="QUESTION_PAPER">Question Papers</option><option value="LAB_MANUAL">Lab Manuals</option><option value="OTHER">Other</option></select>
         <button className="button secondary compact" onClick={clearFilters}>Clear filters</button>
       </section>
       {error&&<div className="error-message" role="alert">{error}</div>}{optionsError&&<div className="error-message" role="alert">{optionsError}</div>}

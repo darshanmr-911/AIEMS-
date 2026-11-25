@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import axios from 'axios'
-import { Download, FileText, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react'
+import { Download, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { api, getSession } from '../lib/api'
 
 type MaterialType = 'NOTES' | 'ASSIGNMENT' | 'QUESTION_PAPER' | 'LAB_MANUAL' | 'OTHER'
@@ -189,29 +189,53 @@ export function TeacherMaterialsContent() {
   const [deleteTarget, setDeleteTarget] = useState<Material | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  const fetchData = useCallback(async () => {
+    const [optionsResponse, materialsResponse] = await Promise.all([
+      api.get<{ department: Department; subjects: SubjectOption[] }>('/teacher/materials/options/'),
+      api.get<Collection<Material>>('/teacher/materials/', {
+        params: { search: search || undefined, approval_status: status || undefined },
+      }),
+    ])
+    return {
+      department: optionsResponse.data.department,
+      subjects: optionsResponse.data.subjects,
+      materials: collection(materialsResponse.data),
+    }
+  }, [search, status])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [optionsResponse, materialsResponse] = await Promise.all([
-        api.get<{ department: Department; subjects: SubjectOption[] }>('/teacher/materials/options/'),
-        api.get<Collection<Material>>('/teacher/materials/', {
-          params: { search: search || undefined, approval_status: status || undefined },
-        }),
-      ])
-      setDepartment(optionsResponse.data.department)
-      setSubjects(optionsResponse.data.subjects)
-      setMaterials(collection(materialsResponse.data))
+      const data = await fetchData()
+      setDepartment(data.department)
+      setSubjects(data.subjects)
+      setMaterials(data.materials)
       setError('')
     } catch (reason) {
       setError(errorText(reason))
     } finally {
       setLoading(false)
     }
-  }, [search, status])
+  }, [fetchData])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    let active = true
+    fetchData().then(data => {
+      if (!active) return
+      setDepartment(data.department)
+      setSubjects(data.subjects)
+      setMaterials(data.materials)
+      setError('')
+    }).catch(reason => {
+      if (active) setError(errorText(reason))
+    }).finally(() => {
+      if (active) setLoading(false)
+    })
+    return () => { active = false }
+  }, [fetchData])
 
   const save = async () => {
+    setLoading(true)
     setEditor(undefined)
     setNotice(editor ? 'Material updated and sent for approval.' : 'Material uploaded and sent for approval.')
     await load()
@@ -250,8 +274,8 @@ export function TeacherMaterialsContent() {
   return <>
     <section className="panel">
       <div className="admin-toolbar">
-        <div className="library-search"><Search size={17}/><input aria-label="Search my materials" value={search} onChange={event => { setSearch(event.target.value); setLoading(true) }} placeholder="Search title or subject"/></div>
-        <select aria-label="Filter by approval status" value={status} onChange={event => { setStatus(event.target.value); setLoading(true) }}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>
+        <div className="library-search"><Search size={17}/><input aria-label="Search my materials" value={search} onChange={event => { setSearch(event.target.value); setLoading(true); setError('') }} placeholder="Search title or subject"/></div>
+        <select aria-label="Filter by approval status" value={status} onChange={event => { setStatus(event.target.value); setLoading(true); setError('') }}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>
         <button className="button primary" onClick={() => setEditor(null)}><Plus size={16}/> Upload material</button>
       </div>
       {department && <p className="form-hint">{department.code} · {department.name} — uploads are automatically associated with your department.</p>}

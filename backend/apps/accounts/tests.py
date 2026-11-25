@@ -10,6 +10,7 @@ from django.core.management import call_command, CommandError
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
+from apps.academics.defaults import DEFAULT_DEPARTMENTS
 from apps.academics.models import Department, Semester, Subject
 from apps.accounts.models import TeacherProfile
 from apps.teachers.models import TeacherSubjectAssignment
@@ -223,16 +224,25 @@ class DepartmentHodAccessTests(APITestCase):
 
 class InitializeDepartmentHodsTests(TestCase):
     def test_command_is_idempotent_and_does_not_overwrite_existing_passwords(self):
-        password = 'TemporaryHOD-Init#2026'
+        passwords = {
+            f'INITIAL_HOD_PASSWORD_{email_prefix.upper()}': f'Z9!{email_prefix}Qx_26#'
+            for _, _, email_prefix in DEFAULT_DEPARTMENTS
+        }
         output = StringIO()
-        with patch.dict(os.environ, {'INITIAL_HOD_PASSWORD': password}):
+        with patch.dict(os.environ, passwords):
             call_command('initialize_department_hods', stdout=output)
             self.assertIn('hodaiml@aiems.edu.in', output.getvalue())
-            self.assertNotIn(password, output.getvalue())
+            for password in passwords.values():
+                self.assertNotIn(password, output.getvalue())
 
             user = User.objects.get(email='hodaiml@aiems.edu.in')
             self.assertTrue(user.must_change_password)
-            self.assertTrue(user.check_password(password))
+            for _, _, email_prefix in DEFAULT_DEPARTMENTS:
+                account = User.objects.get(email=f'hod{email_prefix}@aiems.edu.in')
+                self.assertTrue(account.must_change_password)
+                self.assertTrue(
+                    account.check_password(passwords[f'INITIAL_HOD_PASSWORD_{email_prefix.upper()}'])
+                )
             user.set_password('ManuallyChangedPassword789!')
             user.must_change_password = False
             user.save(update_fields=['password', 'must_change_password'])
@@ -243,7 +253,8 @@ class InitializeDepartmentHodsTests(TestCase):
             self.assertFalse(user.must_change_password)
             self.assertEqual(User.objects.filter(role=User.Role.HOD).count(), 7)
 
-    def test_command_requires_environment_password(self):
+    def test_command_requires_department_password_variables(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(CommandError):
                 call_command('initialize_department_hods', stdout=StringIO())
+        self.assertFalse(Department.objects.exists())

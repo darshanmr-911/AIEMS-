@@ -17,7 +17,19 @@ services:
         value: ".onrender.com"
       - key: CORS_ALLOWED_ORIGINS
         sync: false
-      - key: INITIAL_HOD_PASSWORD
+      - key: INITIAL_HOD_PASSWORD_AIML
+        sync: false
+      - key: INITIAL_HOD_PASSWORD_CSE
+        sync: false
+      - key: INITIAL_HOD_PASSWORD_ISE
+        sync: false
+      - key: INITIAL_HOD_PASSWORD_ECE
+        sync: false
+      - key: INITIAL_HOD_PASSWORD_EEE
+        sync: false
+      - key: INITIAL_HOD_PASSWORD_MECH
+        sync: false
+      - key: INITIAL_HOD_PASSWORD_CIVIL
         sync: false
       - key: EMAIL_HOST
         sync: false

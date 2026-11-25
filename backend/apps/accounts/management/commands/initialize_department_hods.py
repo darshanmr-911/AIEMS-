@@ -10,18 +10,10 @@ from apps.academics.models import Department
 
 
 class Command(BaseCommand):
-    help = 'Create missing department HOD accounts using INITIAL_HOD_PASSWORD.'
+    help = 'Create missing department HOD accounts using department-specific environment passwords.'
 
     @transaction.atomic
     def handle(self, *args, **options):
-        password = os.environ.get('INITIAL_HOD_PASSWORD')
-        if not password:
-            raise CommandError('Set INITIAL_HOD_PASSWORD before initializing HOD accounts.')
-        try:
-            password_validation.validate_password(password)
-        except ValidationError as exc:
-            raise CommandError(f'INITIAL_HOD_PASSWORD does not meet password requirements: {exc}') from exc
-
         User = get_user_model()
         created_count = 0
         for code, name, email_prefix in DEFAULT_DEPARTMENTS:
@@ -49,6 +41,13 @@ class Command(BaseCommand):
                 self.stdout.write(f'Already initialized: {email}')
                 continue
 
+            password_variable = f'INITIAL_HOD_PASSWORD_{email_prefix.upper()}'
+            password = os.environ.get(password_variable)
+            if not password:
+                raise CommandError(
+                    f'Set {password_variable} before initializing {email}.'
+                )
+
             if User.objects.filter(username__iexact=email).exists():
                 raise CommandError(f'The HOD username {email} is already in use.')
 
@@ -56,7 +55,9 @@ class Command(BaseCommand):
             try:
                 password_validation.validate_password(password, user)
             except ValidationError as exc:
-                raise CommandError(f'INITIAL_HOD_PASSWORD does not meet password requirements: {exc}') from exc
+                raise CommandError(
+                    f'{password_variable} does not meet password requirements: {exc}'
+                ) from exc
             user.set_password(password)
             user.must_change_password = True
             user.save()

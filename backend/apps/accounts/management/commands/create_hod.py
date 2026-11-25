@@ -7,5 +7,5 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         raise CommandError(
             'Single central HOD accounts are no longer supported. '
-            'Use initialize_department_hods with INITIAL_HOD_PASSWORD.'
+            'Use initialize_department_hods with department-specific password variables.'
         )

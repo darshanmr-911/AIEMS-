@@ -21,23 +21,30 @@ import {
   HodTeachersContent,
   HodSubjectsContent,
 } from './components/HodAdminContent'
+import { TeacherMaterialsContent } from './components/TeacherMaterialsContent'
 
 type Session = AppSession
 type Material = {
   id: number
   title: string
   description?: string
-  category: string
+  material_type: string
+  category?: string
   approval_status: string
   subject_name?: string
   subject_code?: string
   uploaded_by_name?: string
-  uploaded_at: string
+  created_at?: string
+  uploaded_at?: string
   download_count: number
   file?: string
   module?: number
   department_name?: string
+  department_code?: string
   semester_number?: number
+  semester?: number
+  subject?: number
+  academic_year?: string
 }
 
 function Logo({ compact = false }: { compact?: boolean }) {
@@ -76,7 +83,7 @@ function Home() {
   const navigate = useNavigate()
   const departments = [
     ['AIML','Artificial Intelligence & ML'], ['CSE','Computer Science'], ['ISE','Information Science'],
-    ['ECE','Electronics & Communication'], ['EEE','Electrical & Electronics'], ['ME','Mechanical'], ['CE','Civil'],
+    ['ECE','Electronics & Communication'], ['EEE','Electrical & Electronics'], ['MECH','Mechanical'], ['CIVIL','Civil'],
   ]
   const submitSearch = (event: FormEvent) => {
     event.preventDefault()
@@ -118,14 +125,14 @@ function Home() {
 
         <section className="semester-strip" aria-label="Browse by semester">
           <span>Browse by semester</span>
-          <div>{[1,2,3,4,5,6,7,8].map(n => <button key={n}>Semester {n}</button>)}</div>
+          <div>{[1,2,3,4,5,6,7,8].map(n => <a key={n} href={`/materials?semester=${n}`}>Semester {n}</a>)}</div>
         </section>
 
         <section className="public-section" id="departments">
           <SectionHeading overline="Departments" title="Choose your department" action="View all departments"/>
           <div className="department-grid">
             {departments.map(([code,name]) => (
-              <a className="department-card" href={`/materials?department__code=${encodeURIComponent(code)}`} key={code}>
+              <a className="department-card" href={`/materials?department_code=${encodeURIComponent(code)}`} key={code}>
                 <div className="department-code">{code}</div>
                 <div><h3>{name}</h3><p>View resources <ArrowRight size={14}/></p></div>
               </a>
@@ -147,7 +154,7 @@ function Home() {
           <div className="about-metrics"><Metric value="3" label="Access roles"/><Metric value="8" label="Semesters"/><Metric value="5" label="Learning modules"/></div>
         </section>
       </main>
-      <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Department HOD login</a><a href="/student/login">Student sign in</a></div></footer>
+      <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Department HOD login</a><a href="/teacher/login">Teacher sign in</a><a href="/student/login">Student sign in</a></div></footer>
     </motion.div>
   )
 }
@@ -254,6 +261,42 @@ function StudentLoginPage() {
   </div>
 }
 
+function TeacherLoginPage() {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.post<AppSession>('/auth/teacher/login/', { email, password })
+      saveSession(response.data)
+      navigate(response.data.must_change_password ? '/change-password' : '/teacher/materials')
+    } catch (reason) {
+      setError(apiErrorMessage(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <div className="auth-layout">
+    <div className="auth-aside"><a href="/"><Logo/></a><div><span className="overline">AIEMS Learning Hub</span><h1>Share learning with your department.</h1><p>Sign in with the teacher account created by your department HOD.</p></div><div className="auth-aside-footer"><span>Authorized teacher access</span><span>AIEMS · 2026</span></div></div>
+    <div className="auth-panel"><form className="auth-form" onSubmit={submit}>
+      <div className="auth-heading"><span>Teacher access</span><h2>Sign in</h2></div>
+      <Field label="Official email"><input type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="teacher@aiems.edu.in"/></Field>
+      <Field label="Password"><input type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)}/></Field>
+      {error && <div className="error-message">{error}</div>}
+      <button className="button primary full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'} {!loading && <ArrowRight size={17}/>}</button>
+      <a className="auth-switch" href="/password-reset">Forgot password?</a>
+      <p className="auth-switch">No public teacher registration is available. Contact your department HOD for access.</p>
+    </form></div>
+  </div>
+}
+
 function StudentRegistrationPage() {
   const navigate = useNavigate()
   const [form, setForm] = useState({
@@ -316,7 +359,7 @@ function ChangePasswordPage() {
     try {
       const response = await api.post<{ access: string; refresh: string; must_change_password: boolean }>('/auth/password/change/', form)
       saveSession({ ...session, ...response.data })
-      navigate(session.user.role === 'HOD' ? '/hod' : '/student')
+      navigate(session.user.role === 'HOD' ? '/hod' : session.user.role === 'TEACHER' ? '/teacher/materials' : '/student')
     } catch (reason) {
       setError(apiErrorMessage(reason))
     } finally {
@@ -408,9 +451,11 @@ function Field({label,children,span=false}:{label:string,children:ReactNode,span
 function Sidebar({role,collapsed,onCollapse}:{role:Session['user']['role'],collapsed:boolean,onCollapse:()=>void}) {
   const navigate=useNavigate()
   const session=getSession()
-  const items = role==='HOD'
+  const items = role === 'HOD'
     ? [['/hod','Overview',LayoutDashboard],['/hod/teachers','Teachers',Users],['/hod/subjects','Subjects',BookOpen],['/hod/assignments','Assignments',ClipboardList],['/hod/materials','Study materials',Library],['/hod/approvals','Approvals',ClipboardList],['/hod/reports','Reports',FileText],['/hod/settings','Settings',Settings]]
-    : [['/student','Overview',LayoutDashboard],['/materials','Library',Library],['/student/bookmarks','Bookmarks',Bookmark],['/student/profile','Profile',CircleUserRound]]
+    : role === 'TEACHER'
+      ? [['/teacher/materials','My materials',Library]]
+      : [['/student','Overview',LayoutDashboard],['/materials','Library',Library],['/student/bookmarks','Bookmarks',Bookmark],['/student/profile','Profile',CircleUserRound]]
   const logout=async()=>{
     try {
       if (session?.refresh) await api.post('/auth/logout/', { refresh: session.refresh })
@@ -522,54 +567,122 @@ async function bookmarkMaterial(material: Material) {
 
 function MaterialList({materials}:{materials:Material[]}) {
   if(!materials?.length) return <EmptyState title="No approved materials yet" text="Approved academic resources will appear here."/>
-  return <div className="material-list">{materials.map(material=><article className="material-row" key={material.id}><div className="file-icon blue"><FileText size={18}/></div><div className="material-info"><strong>{material.title}</strong><span>{material.subject_name||'Academic resource'} · {material.category.replaceAll('_',' ').toLowerCase()}</span></div><div className="material-meta"><span>{material.approval_status}</span><small>{material.download_count||0} downloads</small></div><button className="icon-button" title="Bookmark" onClick={()=>bookmarkMaterial(material)}><Bookmark size={16}/></button><button className="icon-button" title="Download" onClick={()=>downloadMaterial(material)}><Download size={16}/></button></article>)}</div>
+  return <div className="material-list">{materials.map(material=><article className="material-row" key={material.id}><div className="file-icon blue"><FileText size={18}/></div><div className="material-info"><strong>{material.title}</strong><span>{material.subject_name||'Academic resource'} · {(material.material_type || material.category || 'OTHER').replaceAll('_',' ').toLowerCase()}</span></div><div className="material-meta"><span>{material.approval_status}</span><small>{material.download_count||0} downloads</small></div><button className="icon-button" title="Bookmark" onClick={()=>bookmarkMaterial(material)}><Bookmark size={16}/></button><button className="icon-button" title="Download" onClick={()=>downloadMaterial(material)}><Download size={16}/></button></article>)}</div>
 }
 
 function MaterialsLibrary() {
-  const [searchParams]=useSearchParams()
-  const [materials,setMaterials]=useState<Material[]>([])
-  const [query,setQuery]=useState(searchParams.get('q') || '')
-  const [category,setCategory]=useState('')
-  const [loading,setLoading]=useState(true)
-  const [error,setError]=useState('')
-  const departmentCode=searchParams.get('department__code') || ''
-  useEffect(()=>{
-    api.get('/public/materials/',{params:{search:query||undefined,category:category||undefined,'department__code':departmentCode||undefined}})
-      .then(response=>setMaterials(Array.isArray(response.data)?response.data:response.data.results||[]))
-      .catch(reason=>setError(apiErrorMessage(reason)))
-      .finally(()=>setLoading(false))
-  },[query,category,departmentCode])
-  const search=(value:string)=>{setLoading(true);setError('');setQuery(value)}
-  const selectCategory=(value:string)=>{setLoading(true);setError('');setCategory(value)}
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [materials, setMaterials] = useState<Material[]>([])
+  const [subjects, setSubjects] = useState<Array<{ id: number; name: string; code: string }>>([])
+  const [query, setQuery] = useState(searchParams.get('q') || '')
+  const [departmentCode, setDepartmentCode] = useState(searchParams.get('department_code') || searchParams.get('department__code') || '')
+  const [studyYear, setStudyYear] = useState(searchParams.get('study_year') || '')
+  const [semester, setSemester] = useState(searchParams.get('semester') || '')
+  const [subject, setSubject] = useState(searchParams.get('subject') || '')
+  const [materialType, setMaterialType] = useState(searchParams.get('material_type') || '')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [optionsError, setOptionsError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    const params = {
+      search: query || undefined,
+      department_code: departmentCode || undefined,
+      study_year: studyYear || undefined,
+      semester: semester || undefined,
+      subject: subject || undefined,
+      material_type: materialType || undefined,
+    }
+    setLoading(true)
+    setError('')
+    api.get('/public/materials/', { params })
+      .then(response => {
+        if (active) setMaterials(Array.isArray(response.data) ? response.data : response.data.results || [])
+      })
+      .catch(reason => { if (active) setError(apiErrorMessage(reason)) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [query, departmentCode, studyYear, semester, subject, materialType])
+
+  useEffect(() => {
+    let active = true
+    setOptionsError('')
+    api.get<Array<{ id: number; name: string; code: string }>>('/public/materials/options/', {
+      params: {
+        department_code: departmentCode || undefined,
+        study_year: studyYear || undefined,
+        semester: semester || undefined,
+      },
+    }).then(response => {
+      if (!active) return
+      setSubjects(response.data)
+    }).catch(reason => { if (active) setOptionsError(apiErrorMessage(reason)) })
+    return () => { active = false }
+  }, [departmentCode, studyYear, semester])
+
+  const setDepartment = (value: string) => {
+    setDepartmentCode(value)
+    setSubject('')
+    setLoading(true)
+  }
+  const setYear = (value: string) => {
+    setStudyYear(value)
+    setSemester('')
+    setSubject('')
+    setLoading(true)
+  }
+  const setSemesterFilter = (value: string) => {
+    setSemester(value)
+    setSubject('')
+    setLoading(true)
+  }
+  const clearFilters = () => {
+    setQuery('')
+    setDepartmentCode('')
+    setStudyYear('')
+    setSemester('')
+    setSubject('')
+    setMaterialType('')
+    setSearchParams({}, { replace: true })
+  }
   const download=async(material:Material)=>{
     try { await downloadMaterial(material) } catch(reason) { setError(apiErrorMessage(reason)) }
   }
+  const semesterOptions = studyYear
+    ? [(Number(studyYear) - 1) * 2 + 1, (Number(studyYear) - 1) * 2 + 2]
+    : [1, 2, 3, 4, 5, 6, 7, 8]
   return <div className="public-site">
     <PublicHeader/>
     <main className="public-section public-library">
       <div className="section-heading"><div><span>AIEMS Academic Hub</span><h1>{departmentCode ? `${departmentCode} resources` : 'Study material library'}</h1><p>Browse and download approved learning resources from across AIEMS.</p></div></div>
       <section className="library-toolbar" aria-label="Filter study materials">
-        <div className="library-search"><Search size={18}/><input aria-label="Search materials" value={query} onChange={event=>search(event.target.value)} placeholder="Search title, subject or subject code"/></div>
-        <select aria-label="Filter by category" value={category} onChange={event=>selectCategory(event.target.value)}><option value="">All categories</option><option value="NOTES">Notes</option><option value="PREVIOUS_PAPER">Previous papers</option><option value="MODEL_PAPER">Model papers</option><option value="ASSIGNMENT">Assignments</option><option value="LAB_MANUAL">Lab manuals</option><option value="SYLLABUS">Syllabus</option></select>
+        <div className="library-search"><Search size={18}/><input aria-label="Search materials" value={query} onChange={event => { setQuery(event.target.value); setLoading(true) }} placeholder="Search title, subject or subject code"/></div>
+        <select aria-label="Filter by department" value={departmentCode} onChange={event => setDepartment(event.target.value)}><option value="">All departments</option><option value="AIML">AIML</option><option value="CSE">CSE</option><option value="ISE">ISE</option><option value="ECE">ECE</option><option value="EEE">EEE</option><option value="MECH">Mechanical</option><option value="CIVIL">Civil</option></select>
+        <select aria-label="Filter by study year" value={studyYear} onChange={event => setYear(event.target.value)}><option value="">All years</option>{[1, 2, 3, 4].map(year => <option value={year} key={year}>{year}{year === 1 ? 'st' : year === 2 ? 'nd' : year === 3 ? 'rd' : 'th'} Year</option>)}</select>
+        <select aria-label="Filter by semester" value={semester} onChange={event => setSemesterFilter(event.target.value)}><option value="">All semesters</option>{semesterOptions.map(number => <option value={number} key={number}>{number}{number === 1 ? 'st' : number === 2 ? 'nd' : number === 3 ? 'rd' : 'th'} Semester</option>)}</select>
+        <select aria-label="Filter by subject" value={subject} onChange={event => { setSubject(event.target.value); setLoading(true) }}><option value="">All subjects</option>{subjects.map(option => <option value={option.id} key={option.id}>{option.code} · {option.name}</option>)}</select>
+        <select aria-label="Filter by material type" value={materialType} onChange={event => { setMaterialType(event.target.value); setLoading(true) }}><option value="">All material types</option><option value="NOTES">Notes</option><option value="ASSIGNMENT">Assignments</option><option value="QUESTION_PAPER">Question Papers</option><option value="LAB_MANUAL">Lab Manuals</option><option value="OTHER">Other</option></select>
+        <button className="button secondary compact" onClick={clearFilters}>Clear filters</button>
       </section>
-      {error&&<div className="error-message" role="alert">{error}</div>}
+      {error&&<div className="error-message" role="alert">{error}</div>}{optionsError&&<div className="error-message" role="alert">{optionsError}</div>}
       {loading?<div className="material-card-grid">{[1,2,3,4].map(n=><div className="material-card skeleton" key={n}></div>)}</div>:materials.length?<div className="material-card-grid">{materials.map(m=><article className="material-card" key={m.id}>
-        <div className="material-card-top"><div className="file-icon blue"><FileText/></div><span className="category-label">{m.category.replaceAll('_',' ').toLowerCase()}</span></div>
+        <div className="material-card-top"><div className="file-icon blue"><FileText/></div><span className="category-label">{(m.material_type || m.category || 'OTHER').replaceAll('_',' ').toLowerCase()}</span></div>
         <h3>{m.title}</h3><p>{m.description||'Approved academic resource'}</p>
         <div className="public-material-meta"><span>{m.subject_code||m.subject_name||'AIEMS'}</span><span>{m.department_name||departmentCode}{m.semester_number?` · Semester ${m.semester_number}`:''}</span></div>
         <div className="material-card-footer"><span>{m.download_count||0} downloads</span><button className="button secondary compact" onClick={()=>void download(m)}><Download size={15}/> Download</button></div>
-      </article>)}</div>:<EmptyState title="No matching resources" text="Try clearing the search or selecting another category."/>}
+      </article>)}</div>:<EmptyState title="No matching resources" text="Try changing your academic filters or clear them to browse all approved materials."/>}
     </main>
-    <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Department HOD login</a><a href="/student/login">Student sign in</a></div></footer>
+    <footer className="public-footer" id="contact"><a href="/"><Logo/></a><p>AIEMS College · Your College. Your Learning. Your Future.</p><div><a href="/login">Department HOD login</a><a href="/teacher/login">Teacher sign in</a><a href="/student/login">Student sign in</a></div></footer>
   </div>
 }
 
 function Protected({role,children}:{role:Session['user']['role'],children:ReactNode}) {
   const session=getSession()
-  if (!session) return <Navigate to={role === 'STUDENT' ? '/student/login' : '/login'} replace/>
+  if (!session) return <Navigate to={role === 'STUDENT' ? '/student/login' : role === 'TEACHER' ? '/teacher/login' : '/login'} replace/>
   if (session.must_change_password) return <Navigate to="/change-password" replace/>
   if (session.user.role !== role) {
-    return <Navigate to={session.user.role === 'HOD' ? '/hod' : session.user.role === 'STUDENT' ? '/student' : '/login'} replace/>
+    return <Navigate to={session.user.role === 'HOD' ? '/hod' : session.user.role === 'TEACHER' ? '/teacher/materials' : '/student'} replace/>
   }
   return children
 }
@@ -578,12 +691,14 @@ export default function App() {
   return <BrowserRouter><Routes>
     <Route path="/" element={<Home/>}/>
     <Route path="/login" element={<HodLoginPage/>}/>
+    <Route path="/teacher/login" element={<TeacherLoginPage/>}/>
     <Route path="/student/login" element={<StudentLoginPage/>}/>
     <Route path="/register" element={<StudentRegistrationPage/>}/>
     <Route path="/change-password" element={<ChangePasswordPage/>}/>
     <Route path="/password-reset" element={<PasswordResetRequestPage/>}/>
     <Route path="/password-reset/confirm" element={<PasswordResetConfirmPage/>}/>
     <Route path="/student" element={<Protected role="STUDENT"><StudentDashboard/></Protected>}/>
+    <Route path="/teacher/materials" element={<Protected role="TEACHER"><Dashboard role="TEACHER" title="My study materials" subtitle="Upload resources for your assigned subjects"><TeacherMaterialsContent/></Dashboard></Protected>}/>
     <Route path="/hod" element={<Protected role="HOD"><Dashboard role="HOD" title="Department overview" subtitle="Your department at a glance"><HodDashboardContent/></Dashboard></Protected>}/>
     <Route path="/materials" element={<MaterialsLibrary/>}/>
     <Route path="/student/bookmarks" element={<Protected role="STUDENT"><StudentDashboard/></Protected>}/>

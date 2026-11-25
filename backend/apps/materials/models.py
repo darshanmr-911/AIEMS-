@@ -22,17 +22,14 @@ class StudyMaterial(models.Model):
         REJECTED = 'REJECTED', 'Rejected'
         ARCHIVED = 'ARCHIVED', 'Archived'
 
-    class Category(models.TextChoices):
+    class MaterialType(models.TextChoices):
         NOTES = 'NOTES', 'Subject notes'
-        PREVIOUS_PAPER = 'PREVIOUS_PAPER', 'Previous year question paper'
-        MODEL_PAPER = 'MODEL_PAPER', 'Model question paper'
-        INTERNAL_PAPER = 'INTERNAL_PAPER', 'Internal assessment paper'
         ASSIGNMENT = 'ASSIGNMENT', 'Assignment'
+        QUESTION_PAPER = 'QUESTION_PAPER', 'Question paper'
         LAB_MANUAL = 'LAB_MANUAL', 'Lab manual'
-        PRACTICAL = 'PRACTICAL', 'Practical record'
-        SYLLABUS = 'SYLLABUS', 'Syllabus'
-        IMPORTANT_QUESTIONS = 'IMPORTANT_QUESTIONS', 'Important questions'
-        REFERENCE = 'REFERENCE', 'Reference material'
+        OTHER = 'OTHER', 'Other'
+
+    Category = MaterialType
 
     title = models.CharField(max_length=250)
     description = models.TextField(blank=True)
@@ -54,22 +51,22 @@ class StudyMaterial(models.Model):
     semester = models.ForeignKey('academics.Semester', on_delete=models.PROTECT, related_name='materials')
     subject = models.ForeignKey('academics.Subject', on_delete=models.PROTECT, related_name='materials')
     module = models.ForeignKey('academics.Module', on_delete=models.PROTECT, null=True, blank=True, related_name='materials')
-    category = models.CharField(max_length=30, choices=Category.choices)
+    material_type = models.CharField(max_length=30, choices=MaterialType.choices)
     file = models.FileField(upload_to='materials/%Y/%m/', validators=[validate_material_file])
     thumbnail = models.FileField(upload_to='thumbnails/%Y/%m/', blank=True)
     academic_year = models.CharField(max_length=9)
     approval_status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     rejection_reason = models.TextField(blank=True)
     download_count = models.PositiveIntegerField(default=0)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-uploaded_at']
+        ordering = ['-created_at']
         indexes = [
             models.Index(fields=['approval_status']),
             models.Index(fields=['academic_year']),
-            models.Index(fields=['category']),
+            models.Index(fields=['material_type']),
         ]
 
 

@@ -10,7 +10,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils.http import urlsafe_base64_decode
 
 from apps.academics.models import Department, Semester
-from .models import StudentProfile, User
+from .models import StudentProfile, TeacherProfile, User
 
 
 def build_login_response(user):
@@ -41,7 +41,12 @@ class SecureTokenRefreshSerializer(TokenRefreshSerializer):
             user = User.objects.get(pk=user_id)
         except User.DoesNotExist as exc:
             raise InvalidToken('Token is no longer valid.') from exc
-        if not user.is_active or user.is_teacher():
+        if not user.is_active:
+            raise InvalidToken('Token is no longer valid.')
+        if user.is_teacher() and not TeacherProfile.objects.filter(
+            user=user,
+            department_id=user.department_id,
+        ).exists():
             raise InvalidToken('Token is no longer valid.')
         return super().validate(attrs)
 
@@ -73,6 +78,32 @@ class StudentLoginSerializer(serializers.Serializer):
         user = authenticate(username=attrs['username'], password=attrs['password'])
         if not user or not user.is_active or not user.is_student():
             raise serializers.ValidationError('Invalid username or password.')
+        return build_login_response(user)
+
+
+class TeacherLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        account = User.objects.filter(
+            email__iexact=attrs['email'],
+            role=User.Role.TEACHER,
+            department__isnull=False,
+        ).first()
+        profile_exists = bool(
+            account
+            and TeacherProfile.objects.filter(
+                user=account,
+                department_id=account.department_id,
+            ).exists()
+        )
+        user = authenticate(
+            username=account.username if account else attrs['email'],
+            password=attrs['password'],
+        )
+        if not profile_exists or user is None or user.pk != account.pk or not user.is_active:
+            raise serializers.ValidationError('Invalid email or password.')
         return build_login_response(user)
 
 

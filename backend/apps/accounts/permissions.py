@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from .models import TeacherProfile
 
 
 class IsHod(BasePermission):
@@ -18,8 +19,13 @@ class IsTeacher(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.is_teacher()
             and request.user.is_active
+            and request.user.is_teacher()
+            and request.user.department_id
+            and TeacherProfile.objects.filter(
+                user=request.user,
+                department_id=request.user.department_id,
+            ).exists()
             and not request.user.must_change_password
         )
 

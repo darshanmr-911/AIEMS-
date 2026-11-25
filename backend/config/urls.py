@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/auth/token/refresh/', SecureTokenRefreshView.as_view()),
     path('api/auth/', include('apps.accounts.urls')),
     path('api/hod/', include('apps.teachers.urls')),
+    path('api/teacher/', include('apps.materials.teacher_urls')),
     path('api/public/', include('apps.materials.urls')),
     path('api/student/', include('apps.students.urls')),
 ]

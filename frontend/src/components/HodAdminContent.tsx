@@ -54,9 +54,11 @@ type Teacher = {
 type TeacherUpload = {
   id: number
   title: string
+  material_type: string
   category: string
   approval_status: string
   uploaded_at: string
+  created_at: string
   download_count: number
 }
 type Semester = {
@@ -84,7 +86,7 @@ type Material = {
   id: number
   title: string
   description?: string
-  category: string
+  material_type: string
   approval_status: string
   subject_name: string
   subject_code: string
@@ -95,6 +97,7 @@ type Material = {
   subject: number
   module: number | null
   academic_year: string
+  created_at: string
 }
 type Account = {
   id: number
@@ -309,7 +312,7 @@ function TeacherDetails({ teacher, onClose }: { teacher: Teacher; onClose: () =>
       {uploadsLoading ? <p className="muted-copy">Loading upload history…</p>
         : uploadError ? <ErrorNotice>{uploadError}</ErrorNotice>
           : uploads.length ? <div className="teacher-upload-history">{uploads.map((upload) => <article key={upload.id}>
-            <div><strong>{upload.title}</strong><small>{upload.category.replaceAll('_', ' ').toLowerCase()} · {new Date(upload.uploaded_at).toLocaleDateString()}</small></div>
+            <div><strong>{upload.title}</strong><small>{upload.material_type.replaceAll('_', ' ').toLowerCase()} · {new Date(upload.created_at).toLocaleDateString()}</small></div>
             <span className={`status ${upload.approval_status.toLowerCase()}`}>{upload.approval_status}</span>
           </article>)}</div>
             : <p className="muted-copy">This teacher has no uploads yet.</p>}
@@ -615,7 +618,7 @@ function MaterialUpload({ semesters, subjects, onClose, onUploaded }: {
     semester: '',
     subject: '',
     module: '',
-    category: 'NOTES',
+    material_type: 'NOTES',
     academic_year: '',
   })
   const [file, setFile] = useState<File | null>(null)
@@ -651,7 +654,7 @@ function MaterialUpload({ semesters, subjects, onClose, onUploaded }: {
       <form onSubmit={submit}>
         <div className="form-grid">
           <Field label="Title"><input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })}/></Field>
-          <Field label="Category"><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option value="NOTES">Notes</option><option value="PREVIOUS_PAPER">Previous paper</option><option value="MODEL_PAPER">Model paper</option><option value="INTERNAL_PAPER">Internal paper</option><option value="ASSIGNMENT">Assignment</option><option value="LAB_MANUAL">Lab manual</option><option value="PRACTICAL">Practical record</option><option value="SYLLABUS">Syllabus</option><option value="IMPORTANT_QUESTIONS">Important questions</option><option value="REFERENCE">Reference material</option></select></Field>
+          <Field label="Material type"><select value={form.material_type} onChange={(event) => setForm({ ...form, material_type: event.target.value })}><option value="NOTES">Notes</option><option value="ASSIGNMENT">Assignments</option><option value="QUESTION_PAPER">Question papers</option><option value="LAB_MANUAL">Lab manuals</option><option value="OTHER">Other</option></select></Field>
           <Field label="Semester"><select required value={form.semester} onChange={(event) => {
             const semester = semesters.find((item) => item.id === Number(event.target.value))
             setForm({ ...form, semester: event.target.value, academic_year: semester?.academic_year || '', subject: '', module: '' })
@@ -756,7 +759,7 @@ export function HodMaterialsContent({ initialStatus = '' }: { initialStatus?: st
       {error && <ErrorNotice>{error}</ErrorNotice>}
       {loading ? <p className="muted-copy">Loading department materials…</p> : materials.length ? <div className="table-wrap"><table><thead><tr><th>Material</th><th>Subject / semester</th><th>Uploaded by</th><th>Downloads</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>{materials.map((material) => <tr key={material.id}>
-          <td><strong>{material.title}</strong><small className="table-subtext">{material.category.replaceAll('_', ' ').toLowerCase()}</small></td>
+          <td><strong>{material.title}</strong><small className="table-subtext">{material.material_type.replaceAll('_', ' ').toLowerCase()}</small></td>
           <td>{material.subject_code || material.subject_name} · Sem {semesters.find((item) => item.id === material.semester)?.semester_number || '—'}</td>
           <td>{material.uploaded_by_name}</td><td>{material.download_count}</td>
           <td><span className={`status ${material.approval_status.toLowerCase()}`}>{material.approval_status}</span></td>

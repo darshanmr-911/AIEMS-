@@ -47,9 +47,9 @@ class StudentSubjectListView(generics.ListAPIView):
 class StudentMaterialListView(generics.ListAPIView):
     permission_classes = [IsStudent]
     serializer_class = StudyMaterialSerializer
-    filterset_fields = ['department', 'semester', 'subject', 'module', 'category', 'academic_year']
+    filterset_fields = ['department', 'semester', 'subject', 'module', 'material_type', 'academic_year']
     search_fields = ['title', 'description', 'subject__subject_name', 'subject__subject_code']
-    ordering_fields = ['uploaded_at', 'download_count']
+    ordering_fields = ['created_at', 'download_count']
 
     def get_queryset(self):
         return StudyMaterial.objects.filter(

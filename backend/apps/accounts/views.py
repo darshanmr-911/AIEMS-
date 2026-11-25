@@ -17,6 +17,7 @@ from .serializers import (
     StudentLoginSerializer,
     StudentRegistrationSerializer,
     SecureTokenRefreshSerializer,
+    TeacherLoginSerializer,
 )
 from .throttles import LoginRateThrottle, PasswordResetRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -52,6 +53,16 @@ class StudentLoginView(APIView):
         return Response(serializer.validated_data)
 
 
+class TeacherLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        serializer = TeacherLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
+
+
 class StudentRegistrationView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = StudentRegistrationSerializer
@@ -61,7 +72,7 @@ class PasswordChangeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        if request.user.role not in (User.Role.HOD, User.Role.STUDENT):
+        if request.user.role not in (User.Role.HOD, User.Role.TEACHER, User.Role.STUDENT):
             return Response({'detail': 'Password changes are unavailable for this account.'}, status=403)
         serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)

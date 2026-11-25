@@ -21,9 +21,21 @@ from .serializers import (
 )
 
 class TeacherUploadHistorySerializer(serializers.ModelSerializer):
+    category = serializers.CharField(source='material_type', read_only=True)
+    uploaded_at = serializers.DateTimeField(source='created_at', read_only=True)
+
     class Meta:
         model = StudyMaterial
-        fields = ['id', 'title', 'category', 'approval_status', 'uploaded_at', 'download_count']
+        fields = [
+            'id',
+            'title',
+            'material_type',
+            'category',
+            'approval_status',
+            'created_at',
+            'uploaded_at',
+            'download_count',
+        ]
 
 
 class TeacherStatusSerializer(serializers.Serializer):
@@ -81,7 +93,7 @@ class HodTeacherViewSet(viewsets.ModelViewSet):
         materials = StudyMaterial.objects.filter(
             department_id=request.user.department_id,
             uploaded_by__user=teacher,
-        ).order_by('-uploaded_at')[:50]
+        ).order_by('-created_at')[:50]
         serializer = TeacherUploadHistorySerializer(materials, many=True)
         return Response(serializer.data)
 
@@ -287,7 +299,7 @@ class HodDashboardView(generics.GenericAPIView):
                 'id': material.id,
                 'title': material.title,
                 'approval_status': material.approval_status,
-                'uploaded_at': material.uploaded_at,
+                'uploaded_at': material.created_at,
                 'uploaded_by_name': (
                     material.uploaded_by.user.get_full_name()
                     if material.uploaded_by_id

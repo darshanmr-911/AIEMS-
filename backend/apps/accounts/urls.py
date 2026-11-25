@@ -5,11 +5,13 @@ from .views import (
     PasswordResetConfirmView,
     PasswordResetRequestView,
     StudentLoginView,
+    TeacherLoginView,
 )
 
 urlpatterns = [
     path('logout/', TokenBlacklistView.as_view()),
     path('student/login/', StudentLoginView.as_view()),
+    path('teacher/login/', TeacherLoginView.as_view()),
     path('password/change/', PasswordChangeView.as_view()),
     path('password/reset/', PasswordResetRequestView.as_view()),
     path('password/reset/confirm/', PasswordResetConfirmView.as_view()),

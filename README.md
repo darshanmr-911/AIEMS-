@@ -38,11 +38,9 @@ JWT authentication, department-scoped HOD endpoints, student endpoints, and
 public approved-material access are available under `/api/`.
 Use SQLite locally. Configure PostgreSQL in `config/settings.py` for production and keep secrets in environment variables.
 
-The public library accepts `department_code`, `study_year` (1-4), `semester`
-(1-8), `subject`, `material_type`, and `search` query parameters together.
-Study year is derived from semester number (semesters 1-2 are year 1, through
-semesters 7-8 as year 4); `academic_year` continues to mean the calendar
-academic year such as `2025-2026`.
+The public library filters by department, semester (1-8), subject, material
+type, and search. `academic_year` remains the calendar academic year, such as
+`2025-2026`.
 
 Teachers sign in at `/teacher/login` using accounts provisioned by their HOD;
 there is no public teacher registration. Teacher material operations are
